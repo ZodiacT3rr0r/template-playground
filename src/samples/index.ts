@@ -15,6 +15,7 @@ import * as paymentReceipt from './paymentReceipt';
 import * as employmentOffer from "./employmentOffer";
 import * as nda from "./nda";
 import * as paymentLogic from "./paymentLogic";
+import * as lateDeliveryLogic from "./lateDeliveryLogic";
 
 export type Sample = {
   NAME: string;
@@ -45,4 +46,5 @@ export const SAMPLES: Array<Sample> = [
   markdown,
   paymentReceipt,
   paymentLogic,
+  lateDeliveryLogic,
 ];
