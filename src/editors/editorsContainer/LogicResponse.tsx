@@ -1,6 +1,7 @@
 import { lazy, Suspense, useMemo } from "react";
 import type { editor } from "monaco-editor";
 import useAppStore from "../../store/store";
+import { useMonacoThemes } from "../useMonacoThemes";
 
 const MonacoEditor = lazy(() =>
   import("@monaco-editor/react").then((mod) => ({ default: mod.Editor }))
@@ -12,12 +13,13 @@ const MonacoEditor = lazy(() =>
 function ReadOnlyJsonPanel({
   value,
   backgroundColor,
+  textColor,
 }: {
   value: string;
   backgroundColor: string;
+  textColor: string;
 }) {
-  const isDark = backgroundColor !== "#ffffff";
-  const themeName = isDark ? "darkTheme" : "lightTheme";
+  const { themeName } = useMonacoThemes(backgroundColor, textColor);
 
   const options: editor.IStandaloneEditorConstructionOptions = useMemo(
     () => ({
@@ -40,7 +42,7 @@ function ReadOnlyJsonPanel({
         <MonacoEditor
           language="json"
           height="100%"
-          value={value || "// No output yet"}
+          value={value || ""}
           options={options}
           theme={themeName}
         />
@@ -119,6 +121,7 @@ function LogicResponse() {
           <ReadOnlyJsonPanel
             value={responseJson}
             backgroundColor={backgroundColor}
+            textColor={textColor}
           />
         </div>
       </div>
@@ -137,6 +140,7 @@ function LogicResponse() {
           <ReadOnlyJsonPanel
             value={contractState}
             backgroundColor={backgroundColor}
+            textColor={textColor}
           />
         </div>
       </div>
@@ -155,6 +159,7 @@ function LogicResponse() {
           <ReadOnlyJsonPanel
             value={emittedEvents}
             backgroundColor={backgroundColor}
+            textColor={textColor}
           />
         </div>
       </div>

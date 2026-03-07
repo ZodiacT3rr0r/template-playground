@@ -1,7 +1,7 @@
-import { lazy, Suspense, useMemo, useCallback, useEffect } from "react";
-import { useMonaco } from "@monaco-editor/react";
+import { lazy, Suspense, useMemo, useCallback } from "react";
 import type { editor } from "monaco-editor";
 import useAppStore from "../../store/store";
+import { useMonacoThemes } from "../useMonacoThemes";
 
 const MonacoEditor = lazy(() =>
   import("@monaco-editor/react").then((mod) => ({ default: mod.Editor }))
@@ -21,39 +21,11 @@ function LogicEditor() {
   const isExecutingLogic = useAppStore((state) => state.isExecutingLogic);
   const executingAction = useAppStore((state) => state.executingAction);
 
-  const { backgroundColor, textColor, showLineNumbers } = useAppStore(
-    (state) => ({
-      backgroundColor: state.backgroundColor,
-      textColor: state.textColor,
-      showLineNumbers: state.showLineNumbers,
-    })
-  );
+  const backgroundColor = useAppStore((state) => state.backgroundColor);
+  const textColor = useAppStore((state) => state.textColor);
+  const showLineNumbers = useAppStore((state) => state.showLineNumbers);
 
-  const monaco = useMonaco();
-
-  const isDark = backgroundColor !== "#ffffff";
-  const themeName = isDark ? "darkTheme" : "lightTheme";
-
-  useEffect(() => {
-    if (monaco) {
-      const define = (name: string, base: "vs" | "vs-dark") => {
-        monaco.editor.defineTheme(name, {
-          base,
-          inherit: true,
-          rules: [],
-          colors: {
-            "editor.background": backgroundColor,
-            "editor.foreground": textColor,
-            "editor.lineHighlightBorder": "#EDE8DC",
-            "editorGhostText.foreground": "#9c9a9a",
-          },
-        });
-      };
-      define("lightTheme", "vs");
-      define("darkTheme", "vs-dark");
-      monaco.editor.setTheme(themeName);
-    }
-  }, [monaco, backgroundColor, textColor, themeName]);
+  const { themeName, isDark } = useMonacoThemes(backgroundColor, textColor);
 
   const options: editor.IStandaloneEditorConstructionOptions = useMemo(
     () => ({
@@ -66,11 +38,12 @@ function LogicEditor() {
     [showLineNumbers]
   );
 
-  const handleEditorDidMount = (
-    _editorInstance: editor.IStandaloneCodeEditor
-  ) => {
-    setLogicCode(editorLogicCode);
-  };
+  const handleEditorDidMount = useCallback(
+    (_editorInstance: editor.IStandaloneCodeEditor) => {
+      setLogicCode(editorLogicCode);
+    },
+    [setLogicCode, editorLogicCode]
+  );
 
   const handleChange = useCallback(
     (val: string | undefined) => {
