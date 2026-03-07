@@ -7,14 +7,14 @@
  *
  * All heavy imports are dynamic (inside functions) so this module loads
  * cleanly in jsdom test environments without triggering CDN fetches.
+ * Do not add module-level side effects — this module is statically imported
+ * by the store and must remain safe in jsdom environments.
  *
  * Note: noErrorValidation is set to true in twoslash options, meaning TypeScript
  * type errors in user code are not surfaced — the JS is emitted regardless.
  * This is intentional for the prototype; a future iteration should expose
  * compile diagnostics via the TwoSlashReturn.errors array.
  */
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 export type TriggerResult = {
   result: object;
@@ -49,13 +49,22 @@ interface InitResponse<S extends IState> extends EngineResponse<S> {}
 type TemplateData = IContract | IClause;
 export abstract class TemplateLogic<T extends TemplateData, S extends IState = IState> {
     abstract trigger(data: T, request: IRequest, state: S): Promise<TriggerResponse<S>>;
-    init(data: T): Promise<InitResponse<S> | undefined>;
+    abstract init(data: T): Promise<InitResponse<S>>;
 }
 `;
 
 const TYPESCRIPT_CDN_URL = "https://cdn.jsdelivr.net/npm/typescript@4.9.4/+esm";
 const SCRIPT_TARGET = 8; // ES2021
 const MODULE_KIND = 6;   // ES2020
+
+function isLogicExecutionError(err: unknown): err is LogicExecutionError {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    typeof (err as LogicExecutionError).phase === "string" &&
+    typeof (err as LogicExecutionError).message === "string"
+  );
+}
 
 async function generateTypescriptFromModel(modelCto: string): Promise<string> {
   const { ModelManager } = await import("@accordproject/concerto-core");
@@ -103,14 +112,18 @@ export async function compileLogic(
       throw { message: `Model parse failed: ${msg}`, phase: "compile" } satisfies LogicExecutionError;
     }
 
+    // TODO: cache compiled output keyed on (logicCode + modelCto) to avoid
+    // a CDN round-trip on every button press. See issue #XXX.
     const combinedSource = [TEMPLATE_LOGIC_TYPES, modelTypes, logicCode].join("\n\n");
 
     const { twoslasher } = await import("@typescript/twoslash");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const options: Record<string, unknown> = {
       fsMap,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       tsModule: ts,
       defaultCompilerOptions: { target: SCRIPT_TARGET, module: MODULE_KIND },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       lzstringModule: (await import("lz-string")) as any,
       defaultOptions: { showEmit: true, noErrorValidation: true, showEmittedFile: "code.js" },
     };
@@ -121,21 +134,19 @@ export async function compileLogic(
     }
     return result.code;
   } catch (err: unknown) {
-    // Re-throw our own typed errors as-is
-    const e = err as LogicExecutionError;
-    if (e.phase && e.message) throw err;
-    // Wrap anything else (CDN fetch failures, twoslash errors, etc.)
+    if (isLogicExecutionError(err)) throw err;
     const message = err instanceof Error ? err.message : "TypeScript compilation failed";
     throw { message, phase: "compile" } satisfies LogicExecutionError;
   }
 }
 
-async function importCompiledModule(jsCode: string): Promise<any> {
-  const dataUri = "data:text/javascript;base64," + btoa(unescape(encodeURIComponent(jsCode)));
-  // new Function hides the import() call from Vite's static bundle analyser.
-  const dynamicImport = new Function("specifier", "return import(specifier)") as (s: string) => Promise<any>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function importCompiledModule(jsCode: string): Promise<any> {
+  const bytes = new TextEncoder().encode(jsCode);
+  const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join("");
+  const dataUri = "data:text/javascript;base64," + btoa(binary);
   // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-  return dynamicImport(dataUri);
+  return import(/* @vite-ignore */ dataUri);
 }
 
 export async function executeInit(
@@ -185,8 +196,7 @@ export async function executeTrigger(
 export function formatLogicError(err: unknown): string {
   if (!err) return "Unknown error";
   if (typeof err === "string") return err;
-  const e = err as LogicExecutionError;
-  if (e.phase && e.message) return `[${e.phase}] ${e.message}`;
+  if (isLogicExecutionError(err)) return `[${err.phase}] ${err.message}`;
   if (err instanceof Error) return err.message;
   return String(err);
 }
