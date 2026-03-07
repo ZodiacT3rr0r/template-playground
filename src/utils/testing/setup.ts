@@ -11,6 +11,7 @@ afterEach(() => {
 // Mock getComputedStyle for Ant Design components that use scroll locking
 // jsdom doesn't fully support getComputedStyle with pseudo-elements
 // rc-util's getScrollBarSize calls .match() on style properties
+if (typeof window !== "undefined") {
 const originalGetComputedStyle = window.getComputedStyle;
 window.getComputedStyle = (elt: Element, pseudoElt?: string | null) => {
   if (pseudoElt) {
@@ -89,3 +90,4 @@ HTMLCanvasElement.prototype.getContext = ((originalGetContext) => {
     return originalGetContext.call(this, contextId as any, options);
   };
 })(HTMLCanvasElement.prototype.getContext);
+} // end typeof window !== "undefined"
