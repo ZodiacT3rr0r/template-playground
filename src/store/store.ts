@@ -10,6 +10,11 @@ import { SAMPLES, Sample } from "../samples";
 import * as playground from "../samples/playground";
 import { compress, decompress } from "../utils/compression/compression";
 import { AIConfig, ChatState, KeyProtectionLevel } from '../types/components/AIAssistant.types';
+import {
+  executeInit as logicExecInit,
+  executeTrigger as logicExecTrigger,
+  formatLogicError,
+} from "../utils/logicExecutor";
 
 interface AppState {
   templateMarkdown: string;
@@ -58,15 +63,38 @@ interface AppState {
   isModelCollapsed: boolean;
   isTemplateCollapsed: boolean;
   isDataCollapsed: boolean;
+  isLogicCollapsed: boolean;
+  isRequestCollapsed: boolean;
+  isResponseCollapsed: boolean;
   toggleModelCollapse: () => void;
   toggleTemplateCollapse: () => void;
   toggleDataCollapse: () => void;
+  toggleLogicCollapse: () => void;
+  toggleRequestCollapse: () => void;
+  toggleResponseCollapse: () => void;
   showLineNumbers: boolean;
   setShowLineNumbers: (value: boolean) => void;
   isSettingsOpen: boolean;
   setSettingsOpen: (value: boolean) => void;
   keyProtectionLevel: KeyProtectionLevel | null;
   setKeyProtectionLevel: (level: KeyProtectionLevel | null) => void;
+  // --- Logic execution state ---
+  logicCode: string;
+  editorLogicCode: string;
+  requestJson: string;
+  editorRequestJson: string;
+  responseJson: string;
+  contractState: string;
+  emittedEvents: string;
+  isExecutingLogic: boolean;
+  executingAction: "init" | "trigger" | null;
+  logicError: string | undefined;
+  setLogicCode: (code: string) => void;
+  setEditorLogicCode: (code: string) => void;
+  setRequestJson: (json: string) => void;
+  setEditorRequestJson: (json: string) => void;
+  executeInit: () => Promise<void>;
+  executeTrigger: () => Promise<void>;
 }
 
 export interface DecompressedData {
@@ -74,6 +102,8 @@ export interface DecompressedData {
   modelCto: string;
   data: string;
   agreementHtml: string;
+  logicCode?: string;
+  requestJson?: string;
 }
 
 const rebuildDeBounce = debounce(rebuild, 500);
@@ -196,12 +226,29 @@ const useAppStore = create<AppState>()(
         isModelCollapsed: false,
         isTemplateCollapsed: false,
         isDataCollapsed: false,
+        isLogicCollapsed: false,
+        isRequestCollapsed: false,
+        isResponseCollapsed: false,
         showLineNumbers: getInitialLineNumbers(),
         isSettingsOpen: false,
         keyProtectionLevel: null,
+        // --- Logic execution initial state ---
+        logicCode: "",
+        editorLogicCode: "",
+        requestJson: "{}",
+        editorRequestJson: "{}",
+        responseJson: "",
+        contractState: "",
+        emittedEvents: "",
+        isExecutingLogic: false,
+        executingAction: null,
+        logicError: undefined,
         toggleModelCollapse: () => set((state) => ({ isModelCollapsed: !state.isModelCollapsed })),
         toggleTemplateCollapse: () => set((state) => ({ isTemplateCollapsed: !state.isTemplateCollapsed })),
         toggleDataCollapse: () => set((state) => ({ isDataCollapsed: !state.isDataCollapsed })),
+        toggleLogicCollapse: () => set((state) => ({ isLogicCollapsed: !state.isLogicCollapsed })),
+        toggleRequestCollapse: () => set((state) => ({ isRequestCollapsed: !state.isRequestCollapsed })),
+        toggleResponseCollapse: () => set((state) => ({ isResponseCollapsed: !state.isResponseCollapsed })),
         setShowLineNumbers: (value: boolean) => {
           if (typeof window !== 'undefined') {
             localStorage.setItem('showLineNumbers', String(value));
@@ -241,6 +288,8 @@ const useAppStore = create<AppState>()(
         loadSample: async (name: string) => {
           const sample = SAMPLES.find((s) => s.NAME === name);
           if (sample) {
+          const sampleLogic = sample.LOGIC ?? "";
+          const sampleRequest = sample.REQUEST ?? "{}";
             set(() => ({
               sampleName: sample.NAME,
               agreementHtml: undefined,
@@ -251,6 +300,14 @@ const useAppStore = create<AppState>()(
               editorModelCto: sample.MODEL,
               data: JSON.stringify(sample.DATA, null, 2),
               editorAgreementData: JSON.stringify(sample.DATA, null, 2),
+              logicCode: sampleLogic,
+              editorLogicCode: sampleLogic,
+              requestJson: sampleRequest,
+              editorRequestJson: sampleRequest,
+              responseJson: "",
+              contractState: "",
+              emittedEvents: "",
+              logicError: undefined,
             }));
             await get().rebuild();
           }
@@ -326,12 +383,14 @@ const useAppStore = create<AppState>()(
             modelCto: state.modelCto,
             data: state.data,
             agreementHtml: state.agreementHtml,
+            logicCode: state.logicCode || undefined,
+            requestJson: state.requestJson !== "{}" ? state.requestJson : undefined,
           });
           return `${window.location.origin}/#data=${compressedData}`;
         },
         loadFromLink: async (compressedData: string) => {
           try {
-            const { templateMarkdown, modelCto, data, agreementHtml } = decompress(compressedData);
+            const { templateMarkdown, modelCto, data, agreementHtml, logicCode, requestJson } = decompress(compressedData);
             if (!templateMarkdown || !modelCto || !data) {
               throw new Error("Invalid share link data");
             }
@@ -344,6 +403,10 @@ const useAppStore = create<AppState>()(
               editorAgreementData: data,
               agreementHtml,
               error: undefined,
+              logicCode: logicCode ?? "",
+              editorLogicCode: logicCode ?? "",
+              requestJson: requestJson ?? "{}",
+              editorRequestJson: requestJson ?? "{}",
             }));
             await get().rebuild();
           } catch (error) {
@@ -386,6 +449,83 @@ const useAppStore = create<AppState>()(
         setAIConfig: (config) => set({ aiConfig: config }),
         setChatAbortController: (controller) => set({ chatAbortController: controller }),
         setKeyProtectionLevel: (level) => set({ keyProtectionLevel: level }),
+        // --- Logic execution actions ---
+        setLogicCode: (code: string) => set({ logicCode: code }),
+        setEditorLogicCode: (code: string) => set({ editorLogicCode: code }),
+        setRequestJson: (json: string) => set({ requestJson: json }),
+        setEditorRequestJson: (json: string) => set({ editorRequestJson: json }),
+        executeInit: async () => {
+          const { logicCode, modelCto, data } = get();
+          set({ isExecutingLogic: true, executingAction: "init", logicError: undefined });
+          try {
+            let parsedData: object;
+            try {
+              parsedData = JSON.parse(data) as object;
+            } catch {
+              throw { message: "Contract data is not valid JSON", phase: "execute" } as const;
+            }
+            const result = await logicExecInit(logicCode, modelCto, parsedData);
+            set({
+              contractState: JSON.stringify(result.state ?? {}, null, 2),
+              responseJson: "",
+              emittedEvents: "",
+              isExecutingLogic: false,
+              executingAction: null,
+              logicError: undefined,
+            });
+          } catch (err: unknown) {
+            set({
+              logicError: formatLogicError(err),
+              isExecutingLogic: false,
+              executingAction: null,
+            });
+          }
+        },
+        executeTrigger: async () => {
+          const { logicCode, modelCto, data, requestJson, contractState } = get();
+          set({ isExecutingLogic: true, executingAction: "trigger", logicError: undefined });
+          try {
+            let parsedData: object;
+            let parsedRequest: object;
+            let parsedState: object;
+            try {
+              parsedData = JSON.parse(data) as object;
+            } catch {
+              throw { message: "Contract data is not valid JSON", phase: "execute" } as const;
+            }
+            try {
+              parsedRequest = JSON.parse(requestJson) as object;
+            } catch {
+              throw { message: "Request JSON is not valid JSON", phase: "execute" } as const;
+            }
+            try {
+              parsedState = contractState ? (JSON.parse(contractState) as object) : {};
+            } catch {
+              throw { message: "Contract state is not valid JSON", phase: "execute" } as const;
+            }
+            const result = await logicExecTrigger(
+              logicCode,
+              modelCto,
+              parsedData,
+              parsedRequest,
+              parsedState
+            );
+            set({
+              responseJson: JSON.stringify(result.result ?? {}, null, 2),
+              contractState: JSON.stringify(result.state ?? parsedState, null, 2),
+              emittedEvents: JSON.stringify(result.events ?? [], null, 2),
+              isExecutingLogic: false,
+              executingAction: null,
+              logicError: undefined,
+            });
+          } catch (err: unknown) {
+            set({
+              logicError: formatLogicError(err),
+              isExecutingLogic: false,
+              executingAction: null,
+            });
+          }
+        },
         resetChat: () => {
           const { chatAbortController } = get();
           if (chatAbortController) {

@@ -14,12 +14,17 @@ import * as blank from "./blank";
 import * as paymentReceipt from './paymentReceipt';
 import * as employmentOffer from "./employmentOffer";
 import * as nda from "./nda";
+import * as paymentLogic from "./paymentLogic";
 
 export type Sample = {
   NAME: string;
   MODEL: string;
   TEMPLATE: string;
   DATA: object;
+  /** Optional TypeScript logic code. When present, logic execution panels are shown. */
+  LOGIC?: string;
+  /** Optional pre-filled request JSON for logic execution. */
+  REQUEST?: string;
 };
 
 export const SAMPLES: Array<Sample> = [
@@ -38,5 +43,6 @@ export const SAMPLES: Array<Sample> = [
   list,
   optional,
   markdown,
-  paymentReceipt
+  paymentReceipt,
+  paymentLogic,
 ];
