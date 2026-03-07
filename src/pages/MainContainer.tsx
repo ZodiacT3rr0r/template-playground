@@ -10,7 +10,7 @@ import { SAMPLES } from "../samples";
 import { AIChatPanel } from "../components/AIChatPanel";
 import ProblemPanel from "../components/ProblemPanel";
 import SampleDropdown from "../components/SampleDropdown";
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { TemplateMarkdownToolbar } from "../components/TemplateMarkdownToolbar";
 import { MarkdownEditorProvider } from "../contexts/MarkdownEditorContext";
 import "../styles/pages/MainContainer.css";
@@ -29,9 +29,14 @@ const MainContainer = () => {
   const backgroundColor = useAppStore((state) => state.backgroundColor);
   const textColor = useAppStore((state) => state.textColor);
 
-  // Determine whether the active sample has logic
-  const activeSample = SAMPLES.find((s) => s.NAME === sampleName);
-  const hasLogic = Boolean(activeSample?.LOGIC);
+  const logicCode = useAppStore((state) => state.logicCode);
+
+  // Show logic panels when the active sample ships built-in logic, or
+  // when logic code was loaded from a share link.
+  const hasLogic = useMemo(
+    () => Boolean(SAMPLES.find((s) => s.NAME === sampleName)?.LOGIC) || logicCode !== "",
+    [sampleName, logicCode]
+  );
 
   const handleDownloadPdf = async () => {
     const element = downloadRef.current;
@@ -67,39 +72,21 @@ const MainContainer = () => {
     }
   };
 
-  const {
-    isAIChatOpen,
-    isEditorsVisible,
-    isPreviewVisible,
-    isProblemPanelVisible,
-    isModelCollapsed,
-    isTemplateCollapsed,
-    isDataCollapsed,
-    isLogicCollapsed,
-    isRequestCollapsed,
-    isResponseCollapsed,
-    toggleModelCollapse,
-    toggleDataCollapse,
-    toggleLogicCollapse,
-    toggleRequestCollapse,
-    toggleResponseCollapse,
-  } = useAppStore((state) => ({
-    isAIChatOpen: state.isAIChatOpen,
-    isEditorsVisible: state.isEditorsVisible,
-    isPreviewVisible: state.isPreviewVisible,
-    isProblemPanelVisible: state.isProblemPanelVisible,
-    isModelCollapsed: state.isModelCollapsed,
-    isTemplateCollapsed: state.isTemplateCollapsed,
-    isDataCollapsed: state.isDataCollapsed,
-    isLogicCollapsed: state.isLogicCollapsed,
-    isRequestCollapsed: state.isRequestCollapsed,
-    isResponseCollapsed: state.isResponseCollapsed,
-    toggleModelCollapse: state.toggleModelCollapse,
-    toggleDataCollapse: state.toggleDataCollapse,
-    toggleLogicCollapse: state.toggleLogicCollapse,
-    toggleRequestCollapse: state.toggleRequestCollapse,
-    toggleResponseCollapse: state.toggleResponseCollapse,
-  }));
+  const isAIChatOpen = useAppStore((state) => state.isAIChatOpen);
+  const isEditorsVisible = useAppStore((state) => state.isEditorsVisible);
+  const isPreviewVisible = useAppStore((state) => state.isPreviewVisible);
+  const isProblemPanelVisible = useAppStore((state) => state.isProblemPanelVisible);
+  const isModelCollapsed = useAppStore((state) => state.isModelCollapsed);
+  const isTemplateCollapsed = useAppStore((state) => state.isTemplateCollapsed);
+  const isDataCollapsed = useAppStore((state) => state.isDataCollapsed);
+  const isLogicCollapsed = useAppStore((state) => state.isLogicCollapsed);
+  const isRequestCollapsed = useAppStore((state) => state.isRequestCollapsed);
+  const isResponseCollapsed = useAppStore((state) => state.isResponseCollapsed);
+  const toggleModelCollapse = useAppStore((state) => state.toggleModelCollapse);
+  const toggleDataCollapse = useAppStore((state) => state.toggleDataCollapse);
+  const toggleLogicCollapse = useAppStore((state) => state.toggleLogicCollapse);
+  const toggleRequestCollapse = useAppStore((state) => state.toggleRequestCollapse);
+  const toggleResponseCollapse = useAppStore((state) => state.toggleResponseCollapse);
 
   const [, setLoading] = useState(true);
 
