@@ -72,6 +72,10 @@ async function generateTypescriptFromModel(modelCto: string): Promise<string> {
   const { InMemoryWriter } = await import("@accordproject/concerto-util");
   const modelManager = new ModelManager({ strict: true });
   modelManager.addCTOModel(modelCto, undefined, true);
+  // Fetch any external namespaces declared in the CTO model's import statements
+  // (e.g. org.accordproject.contract@0.2.0 from models.accordproject.org).
+  // Without this the TypeScript visitor cannot resolve imported types.
+  await modelManager.updateExternalModels();
   // eslint-disable-next-line @typescript-eslint/no-unsafe-call
   const visitor = new CodeGen.TypescriptVisitor();
   const writer = new InMemoryWriter();
