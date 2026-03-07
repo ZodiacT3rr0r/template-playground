@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import JSONEditor from "../JSONEditor";
 import useAppStore from "../../store/store";
 
@@ -12,11 +13,14 @@ function LogicRequest() {
   );
   const setRequestJson = useAppStore((state) => state.setRequestJson);
 
-  const handleChange = (val: string | undefined) => {
-    const v = val ?? "{}";
-    setEditorRequestJson(v);
-    setRequestJson(v);
-  };
+  const handleChange = useCallback(
+    (val: string | undefined) => {
+      const v = val ?? "{}";
+      setEditorRequestJson(v);
+      setRequestJson(v);
+    },
+    [setEditorRequestJson, setRequestJson]
+  );
 
   return <JSONEditor value={editorRequestJson} onChange={handleChange} />;
 }

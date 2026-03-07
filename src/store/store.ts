@@ -288,8 +288,8 @@ const useAppStore = create<AppState>()(
         loadSample: async (name: string) => {
           const sample = SAMPLES.find((s) => s.NAME === name);
           if (sample) {
-          const sampleLogic = sample.LOGIC ?? "";
-          const sampleRequest = sample.REQUEST ?? "{}";
+            const sampleLogic = sample.LOGIC ?? "";
+            const sampleRequest = sample.REQUEST ?? "{}";
             set(() => ({
               sampleName: sample.NAME,
               agreementHtml: undefined,
