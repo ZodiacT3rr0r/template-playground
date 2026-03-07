@@ -129,7 +129,7 @@ export async function compileLogic(
       defaultCompilerOptions: { target: SCRIPT_TARGET, module: MODULE_KIND },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       lzstringModule: (await import("lz-string")) as any,
-      defaultOptions: { showEmit: true, noErrorValidation: true, showEmittedFile: "code.js" },
+      defaultOptions: { showEmit: true, noErrorValidation: true, showEmittedFile: "index.js" },
     };
 
     const result = twoslasher(combinedSource, "ts", options);
