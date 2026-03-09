@@ -65,49 +65,41 @@ const DATA = {
   $identifier: "c88e5ed7-c3e0-4249-a99c-ce9278684ac8",
 };
 
-const LOGIC = `// Utility: scales the goods value for penalty calculation
-function calc(input: number): number {
-  const result = input * 2.5;
-  return result;
+// Exact logic from demo-template/archives/latedeliveryandpenalty-typescript/logic/logic.ts
+// The ONLY difference: no import statements (logicExecutor.ts prepends all types).
+const LOGIC = `// demo utility function
+function calc(input: number) : number {
+    const result = input * 2.5;
+    return result;
 }
 
 type LateDeliveryContractResponse = {
-  result: ILateDeliveryAndPenaltyResponse;
-};
+    result: ILateDeliveryAndPenaltyResponse;
+}
 
-class LateDeliveryLogic extends TemplateLogic<ITemplateModel> {
-  async init(data: ITemplateModel): Promise<InitResponse<IState>> {
-    return {};
-  }
-
-  async trigger(
-    data: ITemplateModel,
-    request: ILateDeliveryAndPenaltyRequest
-  ): Promise<LateDeliveryContractResponse> {
-    return {
-      result: {
-        penalty: data.penaltyPercentage * calc(request.goodsValue),
-        buyerMayTerminate: true,
-        $timestamp: new Date(),
-        $class:
-          "io.clause.latedeliveryandpenalty@0.1.0.LateDeliveryAndPenaltyResponse",
-      },
-    };
-  }
+// sample contract logic that is stateless
+// - no init method
+// @ts-ignore
+class LateDeliveryLogic extends TemplateLogic<ITemplateModel>  {
+    async trigger(data: ITemplateModel, request:ILateDeliveryAndPenaltyRequest) : Promise<LateDeliveryContractResponse> {
+        return {
+            result: {
+                penalty: data.penaltyPercentage * calc(request.goodsValue),
+                buyerMayTerminate: true,
+                $timestamp: new Date(),
+                $class: 'io.clause.latedeliveryandpenalty@0.1.0.LateDeliveryAndPenaltyResponse'
+            }
+        }
+    }
 }
 
 export default LateDeliveryLogic;
 `;
 
+// Matches the request object constructed in demo-template/index.js line 33-35
 const REQUEST = JSON.stringify(
   {
-    $class:
-      "io.clause.latedeliveryandpenalty@0.1.0.LateDeliveryAndPenaltyRequest",
-    $timestamp: "2024-01-15T00:00:00.000Z",
-    forceMajeure: false,
-    agreedDelivery: "2017-12-17T03:24:00.000Z",
-    deliveredAt: null,
-    goodsValue: 200.0,
+    goodsValue: 100,
   },
   null,
   2

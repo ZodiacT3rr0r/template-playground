@@ -49,7 +49,7 @@ interface InitResponse<S extends IState> extends EngineResponse<S> {}
 type TemplateData = IContract | IClause;
 export abstract class TemplateLogic<T extends TemplateData, S extends IState = IState> {
     abstract trigger(data: T, request: IRequest, state: S): Promise<TriggerResponse<S>>;
-    abstract init(data: T): Promise<InitResponse<S>>;
+    init(data: T): Promise<InitResponse<S> | undefined> { return Promise.resolve(undefined); }
 }
 `;
 
