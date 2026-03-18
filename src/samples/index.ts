@@ -12,6 +12,8 @@ import * as invitation from "./invitation";
 import * as announcement from "./announcement";
 import * as blank from "./blank";
 import * as paymentReceipt from './paymentReceipt';
+import * as paymentLogic from "./paymentLogic";
+import * as latePaymentPenalty from "./latePaymentPenalty";
 import * as employmentOffer from "./employmentOffer";
 import * as nda from "./nda";
 
@@ -20,6 +22,8 @@ export type Sample = {
   MODEL: string;
   TEMPLATE: string;
   DATA: object;
+  LOGIC?: string;
+  REQUEST?: object;
 };
 
 export const SAMPLES: Array<Sample> = [
@@ -38,5 +42,7 @@ export const SAMPLES: Array<Sample> = [
   list,
   optional,
   markdown,
-  paymentReceipt
+  paymentReceipt,
+  paymentLogic,
+  latePaymentPenalty
 ];

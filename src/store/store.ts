@@ -11,6 +11,7 @@ import * as playground from "../samples/playground";
 import { compress, decompress } from "../utils/compression/compression";
 import { AIConfig, ChatState, KeyProtectionLevel } from '../types/components/AIAssistant.types';
 import { validateBeforeRebuild } from "../utils/validators";
+import { executeInit as runInit, executeTrigger as runTrigger, formatLogicError } from "../utils/logicExecutor";
 
 interface AppState {
   templateMarkdown: string;
@@ -59,15 +60,38 @@ interface AppState {
   isModelCollapsed: boolean;
   isTemplateCollapsed: boolean;
   isDataCollapsed: boolean;
+  isLogicCollapsed: boolean;
+  isRequestCollapsed: boolean;
+  isResponseCollapsed: boolean;
   toggleModelCollapse: () => void;
   toggleTemplateCollapse: () => void;
   toggleDataCollapse: () => void;
+  toggleLogicCollapse: () => void;
+  toggleRequestCollapse: () => void;
+  toggleResponseCollapse: () => void;
   showLineNumbers: boolean;
   setShowLineNumbers: (value: boolean) => void;
   isSettingsOpen: boolean;
   setSettingsOpen: (value: boolean) => void;
   keyProtectionLevel: KeyProtectionLevel | null;
   setKeyProtectionLevel: (level: KeyProtectionLevel | null) => void;
+  logicCode: string;
+  editorLogicCode: string;
+  requestJson: string;
+  editorRequestJson: string;
+  responseJson: string;
+  contractState: string;
+  emittedEvents: string;
+  obligationsJson: string;
+  logicError: string | undefined;
+  isExecutingLogic: boolean;
+  executingAction: "init" | "trigger" | null;
+  setLogicCode: (value: string) => void;
+  setEditorLogicCode: (value: string) => void;
+  setRequestJson: (value: string) => void;
+  setEditorRequestJson: (value: string) => void;
+  executeInit: () => Promise<void>;
+  executeTrigger: () => Promise<void>;
 }
 
 export interface DecompressedData {
@@ -75,6 +99,9 @@ export interface DecompressedData {
   modelCto: string;
   data: string;
   agreementHtml: string;
+  logicCode?: string;
+  requestJson?: string;
+  obligationsJson?: string;
 }
 
 const rebuildDeBounce = debounce(rebuild, 500);
@@ -201,12 +228,29 @@ const useAppStore = create<AppState>()(
         isModelCollapsed: false,
         isTemplateCollapsed: false,
         isDataCollapsed: false,
+        isLogicCollapsed: false,
+        isRequestCollapsed: false,
+        isResponseCollapsed: false,
         showLineNumbers: getInitialLineNumbers(),
         isSettingsOpen: false,
         keyProtectionLevel: null,
+        logicCode: "",
+        editorLogicCode: "",
+        requestJson: "{}",
+        editorRequestJson: "{}",
+        responseJson: "",
+        contractState: "{}",
+        emittedEvents: "[]",
+        obligationsJson: "",
+        logicError: undefined,
+        isExecutingLogic: false,
+        executingAction: null,
         toggleModelCollapse: () => set((state) => ({ isModelCollapsed: !state.isModelCollapsed })),
         toggleTemplateCollapse: () => set((state) => ({ isTemplateCollapsed: !state.isTemplateCollapsed })),
         toggleDataCollapse: () => set((state) => ({ isDataCollapsed: !state.isDataCollapsed })),
+        toggleLogicCollapse: () => set((state) => ({ isLogicCollapsed: !state.isLogicCollapsed })),
+        toggleRequestCollapse: () => set((state) => ({ isRequestCollapsed: !state.isRequestCollapsed })),
+        toggleResponseCollapse: () => set((state) => ({ isResponseCollapsed: !state.isResponseCollapsed })),
         setShowLineNumbers: (value: boolean) => {
           if (typeof window !== 'undefined') {
             localStorage.setItem('showLineNumbers', String(value));
@@ -246,6 +290,8 @@ const useAppStore = create<AppState>()(
         loadSample: async (name: string) => {
           const sample = SAMPLES.find((s) => s.NAME === name);
           if (sample) {
+            const logicCode = sample.LOGIC ?? "";
+            const requestJson = JSON.stringify(sample.REQUEST ?? {}, null, 2);
             set(() => ({
               sampleName: sample.NAME,
               agreementHtml: undefined,
@@ -256,6 +302,15 @@ const useAppStore = create<AppState>()(
               editorModelCto: sample.MODEL,
               data: JSON.stringify(sample.DATA, null, 2),
               editorAgreementData: JSON.stringify(sample.DATA, null, 2),
+              logicCode,
+              editorLogicCode: logicCode,
+              requestJson,
+              editorRequestJson: requestJson,
+              responseJson: "",
+              contractState: "{}",
+              emittedEvents: "[]",
+              obligationsJson: "",
+              logicError: undefined,
             }));
             await get().rebuild();
           }
@@ -324,19 +379,89 @@ const useAppStore = create<AppState>()(
         setEditorAgreementData: (value: string) => {
           set(() => ({ editorAgreementData: value }));
         },
+        setLogicCode: (value: string) => {
+          set(() => ({ logicCode: value }));
+        },
+        setEditorLogicCode: (value: string) => {
+          set(() => ({ editorLogicCode: value }));
+        },
+        setRequestJson: (value: string) => {
+          set(() => ({ requestJson: value }));
+        },
+        setEditorRequestJson: (value: string) => {
+          set(() => ({ editorRequestJson: value }));
+        },
+        executeInit: async () => {
+          const state = get();
+          if (!state.logicCode.trim()) {
+            set({ logicError: "Logic code is required before running init" });
+            return;
+          }
+          set({ isExecutingLogic: true, executingAction: "init", logicError: undefined });
+          try {
+            const data = JSON.parse(state.data) as object;
+            const result = await runInit(state.logicCode, state.modelCto, data);
+            set({
+              contractState: JSON.stringify(result.state, null, 2),
+              obligationsJson: result.obligations.length ? JSON.stringify(result.obligations, null, 2) : "",
+              responseJson: "",
+              emittedEvents: "[]",
+              logicError: undefined,
+            });
+          } catch (error) {
+            set({ logicError: formatLogicError(error) });
+          } finally {
+            set({ isExecutingLogic: false, executingAction: null });
+          }
+        },
+        executeTrigger: async () => {
+          const state = get();
+          if (!state.logicCode.trim()) {
+            set({ logicError: "Logic code is required before running trigger" });
+            return;
+          }
+          set({ isExecutingLogic: true, executingAction: "trigger", logicError: undefined });
+          try {
+            const data = JSON.parse(state.data) as object;
+            const request = JSON.parse(state.requestJson || "{}") as object;
+            const currentState = JSON.parse(state.contractState || "{}") as object;
+            const result = await runTrigger(state.logicCode, state.modelCto, data, request, currentState);
+            set({
+              responseJson: JSON.stringify(result.result, null, 2),
+              contractState: JSON.stringify(result.state, null, 2),
+              emittedEvents: JSON.stringify(result.events, null, 2),
+              obligationsJson: result.obligations.length ? JSON.stringify(result.obligations, null, 2) : "",
+              logicError: undefined,
+            });
+          } catch (error) {
+            set({ logicError: formatLogicError(error) });
+          } finally {
+            set({ isExecutingLogic: false, executingAction: null });
+          }
+        },
         generateShareableLink: () => {
           const state = get();
-          const compressedData = compress({
+          const shareData: DecompressedData = {
             templateMarkdown: state.templateMarkdown,
             modelCto: state.modelCto,
             data: state.data,
             agreementHtml: state.agreementHtml,
-          });
+          };
+          if (state.logicCode.trim()) {
+            shareData.logicCode = state.logicCode;
+          }
+          if (state.requestJson.trim() && state.requestJson.trim() !== "{}") {
+            shareData.requestJson = state.requestJson;
+          }
+          if (state.obligationsJson.trim()) {
+            shareData.obligationsJson = state.obligationsJson;
+          }
+          const compressedData = compress(shareData);
           return `${window.location.origin}/#data=${compressedData}`;
         },
         loadFromLink: async (compressedData: string) => {
           try {
-            const { templateMarkdown, modelCto, data, agreementHtml } = decompress(compressedData);
+            const { templateMarkdown, modelCto, data, agreementHtml, logicCode, requestJson, obligationsJson } = decompress(compressedData);
             if (!templateMarkdown || !modelCto || !data) {
               throw new Error("Invalid share link data");
             }
@@ -348,6 +473,15 @@ const useAppStore = create<AppState>()(
               data,
               editorAgreementData: data,
               agreementHtml,
+              logicCode: logicCode ?? "",
+              editorLogicCode: logicCode ?? "",
+              requestJson: requestJson ?? "{}",
+              editorRequestJson: requestJson ?? "{}",
+              obligationsJson: obligationsJson ?? "",
+              responseJson: "",
+              emittedEvents: "[]",
+              contractState: "{}",
+              logicError: undefined,
               error: undefined,
             }));
             await get().rebuild();
